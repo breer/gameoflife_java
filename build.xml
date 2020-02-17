@@ -1,0 +1,171 @@
+<?xml version="1.0"?>
+<project name="GameOfLife" default="run" basedir=".">
+	
+	<!-- Load properties form file -->
+	<property file="build.properties" />
+	
+	<!-- JUNIT Properties -->
+	<property name="junit.report.dir" value="${report.dir}/junit" />
+	<property name="junit.config.dir" value="${config.dir}/junit" />
+
+	<!-- Checkstyle Properties -->
+	<property name="checkstyle.report.dir" value="${report.dir}/checkstyle" />
+	<property name="checkstyle.config.dir" value="${config.dir}/checkstyle" />
+	
+	<!-- SET UP THE CLASS PATH -->
+	<path id="project.classpath">
+		<fileset dir="${lib.dir}" includes="**/*.jar" />
+	</path>
+	
+	<!-- PREPARING DESTINATION DIRECTORIES -->
+	<target name="prepare">
+		<echo message="preparing report dirs" />
+		<mkdir dir="${junit.report.dir}" />
+
+		<echo message="creating build dir: ${build.dir}" />
+		<mkdir dir="${build.dir}" />
+
+		<echo message="create release dir: ${release.dir}" />
+		<mkdir dir="${release.dir}" />
+			
+		<echo message="create delivery dir: ${delivery.dir}" />
+		<mkdir dir="${delivery.dir}" />
+	</target>
+	
+	<!-- CLEANING DESTINATION DIRECTORIES -->
+	<target name="clean">
+		<echo message="deleting report dirs" />
+		<delete dir="${junit.report.dir}" />
+
+		<echo message="deleting build dir: ${build.dir}" />
+		<delete dir="${build.dir}" />
+
+		<echo message="deleting release dir: ${release.dir}" />
+		<delete dir="${release.dir}" />
+	</target>
+	
+	<!-- COMPILE ALL SOURCES (AND TESTS) -->
+	<target name="compile" depends="prepare">
+		<echo message="compile" />
+		<antcall target="-compileSrc" />
+
+		<available file="${testsource.dir}" type="dir" property="testsource.dir.present" />
+		<antcall target="-compileTests" />
+	</target>
+	
+
+	<!-- COMPILE SRC -->
+	<target name="-compileSrc">
+		<echo message="compiling: ${source.dir}" />
+		<javac srcdir="${source.dir}" destdir="${build.dir}" debug="true" includeantruntime="false">
+			<classpath>
+				<path refid="project.classpath" />
+			</classpath>
+		</javac>
+	</target>
+
+	<!-- COMPILE TESTS -->
+	<target name="-compileTests" if="testsource.dir.present">
+		<echo message="compiling: ${testsource.dir}" />
+		<javac srcdir="${testsource.dir}" destdir="${build.dir}" debug="true" includeantruntime="false">
+			<classpath>
+				<path refid="project.classpath" />
+			</classpath>
+		</javac>
+	</target>
+
+	<!-- GENERATE JAVADOCS -->
+	<target name="doc" description="generate documentation">
+		<javadoc sourcepath="${source.dir}" destdir="${doc.dir}">
+			<classpath>
+				<path refid="project.classpath" />
+			</classpath>
+		</javadoc>
+	</target>
+
+	<!-- EXECUTE TESTS -->
+	<target name="test" depends="compile" if="testsource.dir.present">
+		<junit printsummary="on" fork="true" haltonfailure="false" failureproperty="tests.failed" filtertrace="yes" showoutput="true">
+			<classpath>
+				<pathelement location="${build.dir}" />
+				<path refid="project.classpath" />
+			</classpath>
+
+			<formatter type="brief" usefile="true" />
+			<formatter type="xml" usefile="true" />
+
+			<batchtest todir="${junit.report.dir}">
+				<fileset dir="${testsource.dir}">
+					<include name="**/*Test.java" />
+				</fileset>
+			</batchtest>
+		</junit>
+
+		<!-- GENERATE HTML REPORTS -->
+		<junitreport todir="${junit.report.dir}">
+			<fileset dir="${junit.report.dir}">
+				<include name="TEST-*.xml" />
+			</fileset>
+			<report format="frames" styledir="${junit.config.dir}" todir="${junit.report.dir}" />
+		</junitreport>
+
+		<!-- FAILED JUNIT-TEST, FAILED BUILD -->
+		<fail if="tests.failed" message="One or more tests failed." />
+	</target>
+	
+
+	<!-- CREATING A NEW RELEASE -->
+	<target name="release" depends="clean, compile, test, doc">
+		<!-- GENERATING NEW BUILDNUMBER -->
+		<echo message="generating new buildnumber" />
+		<buildnumber />
+		
+		<!-- CREATING JAR FILE -->
+		<echo message="creating jar file" />
+		<jar destfile="${release.dir}/${appname}-${version}.${build.number}.jar">
+			<fileset dir="${build.dir}" excludes="**/**Test.class" />
+			<manifest>
+				<attribute name="Main-Class" value="${mainclass}" />
+				<attribute name="Class-Path" value=". ./lib/log4j-1.2.9.jar" />
+			</manifest>
+		</jar>
+
+		<!-- COPY LIB DIR TO RELEASE LIB DIR -->
+		<echo message="copy lib dir to release lib dir" />
+		<copy todir="${release.dir}/${lib.dir}">
+			<fileset file="${lib.dir}/log4j-1.2.9.jar" />
+		</copy>
+
+		<!-- COPY PROPERTIES AND XML-FILES TO RELEASE DIR -->
+		<echo message="copy properties and xml-files to release dir" />
+		<copy todir="${release.dir}">
+			<fileset dir="${basedir}" includes="*.properties, *.xml" excludes="build.xml" />
+		</copy>
+
+		<mkdir dir="${release.dir}\log" />
+		
+		<!-- BACKUP THE RELEASE -->
+		<tstamp />
+		<echo message="creating dir: ${delivery.dir}/${DSTAMP}" />
+		<mkdir dir="${delivery.dir}/${DSTAMP}" />
+		
+		<echo message="creating a zip-file" />
+		<zip destfile="${delivery.dir}/${DSTAMP}/${appname}-${version}.${build.number}.zip" basedir="${release.dir}" />
+		
+		<echo message="creating a checksum" />
+		<checksum file="${delivery.dir}/${DSTAMP}/${appname}-${version}.${build.number}.zip" />
+	</target>
+
+	<!-- START THE APP -->
+	<target name="run" depends="clean, compile">
+		<echo message="starting application: ${appname} in dir: ${basedir}" />
+
+		<java classname="${mainclass}" fork="true">
+			<classpath>
+				<pathelement location="." />
+				<pathelement location="${build.dir}" />
+				<path refid="project.classpath" />
+			</classpath>
+		</java>
+	</target>
+</project>
